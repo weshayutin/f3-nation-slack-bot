@@ -4,6 +4,7 @@ import json
 from logging import Logger
 from typing import List
 
+import requests
 from f3_data_models.models import Event, EventInstance, EventType, Location, Org, Org_Type
 from f3_data_models.utils import DbManager
 from slack_sdk.web import WebClient
@@ -55,7 +56,7 @@ def build_ao_add_form(
     )
 
     if edit_ao:
-        slack_id = edit_ao.meta.get("slack_channel_id")
+        slack_id = safe_get(edit_ao.meta, "slack_channel_id")
         form.set_initial_values(
             {
                 actions.CALENDAR_ADD_AO_NAME: edit_ao.name,
@@ -67,48 +68,31 @@ def build_ao_add_form(
             form.set_initial_values({actions.CALENDAR_ADD_AO_LOCATION: str(edit_ao.default_location_id)})
         title_text = "Edit AO"
         if edit_ao.logo_url:
-            form.blocks.insert(5, orm.ImageBlock(image_url=edit_ao.logo_url, alt_text="AO Logo", action="ao_logo"))
+            try:
+                if requests.head(edit_ao.logo_url).status_code == 200:
+                    form.blocks.insert(5, orm.ImageBlock(image_url=edit_ao.logo_url, alt_text="AO Logo"))
+            except requests.RequestException as e:
+                logger.error(f"Error fetching AO logo: {e}")
     else:
         title_text = "Add an AO"
 
-    try:
-        if update_view_id:
-            form.set_initial_values(update_metadata)
-            form.update_modal(
-                client=client,
-                view_id=update_view_id,
-                title_text=title_text,
-                callback_id=actions.ADD_AO_CALLBACK_ID,
-            )
-        else:
-            form.post_modal(
-                client=client,
-                trigger_id=safe_get(body, "trigger_id"),
-                title_text=title_text,
-                callback_id=actions.ADD_AO_CALLBACK_ID,
-                new_or_add="add",
-                parent_metadata={"ao_id": edit_ao.id} if edit_ao else {},
-            )
-    except Exception:
-        logger.info("possibly invalid image, trying to load without it...")
-        form.delete_block("ao_logo")
-        if update_view_id:
-            form.set_initial_values(update_metadata)
-            form.update_modal(
-                client=client,
-                view_id=update_view_id,
-                title_text=title_text,
-                callback_id=actions.ADD_AO_CALLBACK_ID,
-            )
-        else:
-            form.post_modal(
-                client=client,
-                trigger_id=safe_get(body, "trigger_id"),
-                title_text=title_text,
-                callback_id=actions.ADD_AO_CALLBACK_ID,
-                new_or_add="add",
-                parent_metadata={"ao_id": edit_ao.id} if edit_ao else {},
-            )
+    if update_view_id:
+        form.set_initial_values(update_metadata)
+        form.update_modal(
+            client=client,
+            view_id=update_view_id,
+            title_text=title_text,
+            callback_id=actions.ADD_AO_CALLBACK_ID,
+        )
+    else:
+        form.post_modal(
+            client=client,
+            trigger_id=safe_get(body, "trigger_id"),
+            title_text=title_text,
+            callback_id=actions.ADD_AO_CALLBACK_ID,
+            new_or_add="add",
+            parent_metadata={"ao_id": edit_ao.id} if edit_ao else {},
+        )
 
 
 def handle_ao_add(body: dict, client: WebClient, logger: Logger, context: dict, region_record: SlackSettings):
@@ -201,7 +185,7 @@ def handle_ao_edit_delete(body: dict, client: WebClient, logger: Logger, context
         DbManager.update_records(Event, [Event.org_id == ao_id], fields={"is_active": False})
         DbManager.update_records(
             EventInstance,
-            [EventInstance.org_id == ao_id, EventInstance.start_date >= datetime.now()],
+            [EventInstance.org_id == ao_id, EventInstance.start_date >= datetime.datetime.now()],
             fields={"is_active": False},
         )
         trigger_map_revalidation()
