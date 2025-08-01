@@ -34,6 +34,7 @@ The service expects these environment variables:
 - `DATABASE_SCHEMA` - Database name to create/use
 - `PYTHON_VERSION` - Python version to use (set automatically to 3.12)
 
-## Usage
 
-This service is automatically used by Docker Compose. It runs once during startup and then exits, leaving a fully initialized database for the main application. 
+**Migration Inspection Output:**
+- Current database revision
+

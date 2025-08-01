@@ -44,7 +44,10 @@ services:
 ## under dir db-init, check out the Dockerfile and entrypoint.sh for details.
 ## Essentially checks out F3-Data-Models and runs the migrations.
   db-init:
-    build: ./db-init
+    build: 
+      context: ./db-init
+      args:
+        CACHEBUST: "$(date +%Y%m%d%H%M%S)"
     environment:
       - DATABASE_HOST=db
       - PYTHON_VERSION=3.12

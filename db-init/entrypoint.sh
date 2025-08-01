@@ -42,12 +42,33 @@ create_database() {
 run_migrations() {
     echo "🗄️ Running Alembic migrations..."
     
-    # Run the migrations
+    # Setup environment
     poetry env use $PYTHON_VERSION
     poetry install
     poetry run alembic upgrade head
     
     echo "✅ Database schema created successfully!"
+}
+
+# Function to show migration info without running them (for debugging/inspection)
+show_migration_info() {
+    echo "🔍 ALEMBIC MIGRATION INSPECTION (NO CHANGES APPLIED):"
+    echo "======================================="
+    
+    # Setup environment
+    poetry env use $PYTHON_VERSION
+    poetry install
+    
+    # Show current database revision
+    echo "🔍 Current database revision:"
+    CURRENT_REV=$(poetry run alembic current 2>/dev/null || echo "No revision found")
+    echo "   $CURRENT_REV"
+    
+    # Show migration history
+    echo ""
+    echo "📚 All available migrations:"
+    poetry run alembic history --verbose 2>/dev/null || echo "   No migration history available"
+    
 }
 
 # Main execution
@@ -58,7 +79,20 @@ main() {
     wait_for_db
     create_database
     run_migrations
-    
+    show_migration_info
+
+    # Show F3-Data-Models version info
+    echo ""
+    echo "======================================="
+    echo "🏗️  F3-DATA-MODELS VERSION INFO:"
+    echo "======================================="
+    echo "🔑 Git Hash: $(cd /f3-data-models && git rev-parse HEAD 2>/dev/null || echo 'Unknown')"
+    echo "📝 Latest Commit: $(cd /f3-data-models && git log --oneline -n 1 2>/dev/null || echo 'Unknown')"
+    echo "📅 Commit Date: $(cd /f3-data-models && git log -1 --format=%cd --date=iso 2>/dev/null || echo 'Unknown')"
+    echo "👤 Author: $(cd /f3-data-models && git log -1 --format='%an <%ae>' 2>/dev/null || echo 'Unknown')"
+    echo "======================================="
+    echo ""
+
     echo "🎉 F3 Database initialization completed successfully!"
     echo "📊 Database is ready for the F3 Nation Slack Bot!"
 }
