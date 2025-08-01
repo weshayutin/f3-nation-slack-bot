@@ -133,12 +133,6 @@ app.options(MATCH_ALL_PATTERN)(*ARGS, **LAZY_KWARGS)
 app.shortcut(MATCH_ALL_PATTERN)(*ARGS, **LAZY_KWARGS)
 
 if __name__ == "__main__":
-    if LOCAL_DEVELOPMENT:
-        # Use Slack Bolt's built-in development server for local development
-        app.start(port=3000)
-        update_local_region_records()
-    else:
-        # Use Google Cloud Functions handler for production
-        port = 8080
-        app.start(port=port)
-        update_local_region_records()
+    port = 3000 if LOCAL_DEVELOPMENT else 8080
+    app.start(port=port)
+    update_local_region_records()
