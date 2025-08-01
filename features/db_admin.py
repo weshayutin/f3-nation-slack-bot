@@ -248,6 +248,7 @@ def handle_make_org(
     region_record: SlackSettings,
 ):
     team_id = safe_get(body, "team", "id") or safe_get(body, "team_id")
+    region_record: SlackSettings = get_region_record(team_id, body, context, client, logger)
     # Create a new region org record
     org_record: Org = DbManager.create_record(
         Org(
