@@ -93,6 +93,21 @@ def backblast_middleware(
         > datetime.now()
     ):
         backblast_legacy.build_backblast_form(body, client, logger, context, region_record)
+    elif safe_get(body, "actions", 0, "action_id") == actions.MSG_EVENT_BACKBLAST_BUTTON:
+        event_instance_id = safe_convert(safe_get(body, "actions", 0, "value"), int)
+        event_instance = DbManager.get(EventInstance, event_instance_id)
+        if event_instance.backblast_ts:
+            form = copy.deepcopy(forms.ALREADY_POSTED_FORM)
+            form.post_modal(
+                client=client,
+                trigger_id=safe_get(body, "trigger_id"),
+                title_text="Backblast",
+                callback_id=actions.ALREADY_POSTED,
+                submit_button_text="None",
+            )
+            return
+        else:
+            build_backblast_form(body, client, logger, context, region_record)
     else:
         user = get_user(safe_get(body, "user", "id") or safe_get(body, "user_id"), region_record, client, logger)
         user_id = user.user_id
@@ -181,7 +196,9 @@ def build_backblast_form(body: dict, client: WebClient, logger: Logger, context:
     backblast_form = copy.deepcopy(forms.BACKBLAST_FORM)
     attendance_non_slack_users = []
     if event_instance_id:
-        event_record: EventInstance = DbManager.get(EventInstance, event_instance_id, joinedloads="all")
+        event_record: EventInstance = DbManager.get(
+            EventInstance, event_instance_id, joinedloads=[EventInstance.org, EventInstance.event_types]
+        )
         event_metadata = event_record.meta or {}
         already_posted = event_record.backblast_ts is not None
         attendance_records: List[Attendance] = DbManager.find_records(
@@ -320,7 +337,9 @@ def handle_backblast_post(body: dict, client: WebClient, logger: Logger, context
     backblast_form = add_custom_field_blocks(backblast_form, region_record)
 
     if event_instance_id:
-        event: EventInstance = DbManager.get(EventInstance, event_instance_id, joinedloads="all")
+        event: EventInstance = DbManager.get(
+            EventInstance, event_instance_id, joinedloads=[EventInstance.org, EventInstance.event_types]
+        )
         date = event.start_date
         event_type = event.event_types[0].id if event.event_types else None
         event_org = event.org
@@ -455,6 +474,23 @@ def handle_backblast_post(body: dict, client: WebClient, logger: Logger, context
     backblast_data[actions.BACKBLAST_OP] = user_id
     backblast_data["event_instance_id"] = event_instance_id
 
+    if event_instance_id:
+        DbManager.delete_records(
+            Attendance,
+            filters=[
+                Attendance.event_instance_id == event_instance_id,
+                not_(Attendance.is_planned),
+            ],
+        )
+        logger.debug("\nBackblast deleted from database! \n{}".format(post_msg))
+    else:
+        event_instance = DbManager.create_record(EventInstance(start_date=the_date, org_id=event_org.id, name=title))
+        event_instance_id = event_instance.id
+        DbManager.create_record(
+            EventType_x_EventInstance(event_instance_id=event_instance_id, event_type_id=event_type)
+        )
+        backblast_data["event_instance_id"] = event_instance_id
+
     edit_block = slack_orm.ActionsBlock(
         elements=[
             slack_orm.ButtonElement(
@@ -554,16 +590,6 @@ COUNT: {count}
         )
         logger.debug("\nBackblast updated in Slack! \n{}".format(post_msg))
 
-    if event_instance_id:
-        DbManager.delete_records(
-            Attendance,
-            filters=[
-                Attendance.event_instance_id == event_instance_id,
-                not_(Attendance.is_planned),
-            ],
-        )
-        logger.debug("\nBackblast deleted from database! \n{}".format(post_msg))
-
     # res_link = client.chat_getPermalink(channel=chan or message_channel, message_ts=res["ts"])
 
     backblast_parsed = f"""Backblast! {title}
@@ -590,21 +616,13 @@ COUNT: {count}
         EventInstance.meta: custom_fields,
         EventInstance.is_active: True,
     }
-    if event_instance_id:
-        event: EventInstance = DbManager.get(EventInstance, event_instance_id, joinedloads="all")
-        DbManager.update_record(EventInstance, event_instance_id, fields=db_fields)
-        DbManager.update_records(
-            EventType_x_EventInstance,
-            [EventType_x_EventInstance.event_instance_id == event_instance_id],
-            fields={EventType_x_EventInstance.event_type_id: event_type},
-        )  # TODO: handle multiple event types
-    else:
-        db_fields = {k.key: v for k, v in db_fields.items()}
-        event = DbManager.create_record(EventInstance(**db_fields))
-        event_instance_id = event.id
-        DbManager.create_record(
-            EventType_x_EventInstance(event_instance_id=event_instance_id, event_type_id=event_type)
-        )
+    event: EventInstance = DbManager.get(EventInstance, event_instance_id, joinedloads="all")
+    DbManager.update_record(EventInstance, event_instance_id, fields=db_fields)
+    DbManager.update_records(
+        EventType_x_EventInstance,
+        [EventType_x_EventInstance.event_instance_id == event_instance_id],
+        fields={EventType_x_EventInstance.event_type_id: event_type},
+    )  # TODO: handle multiple event types
 
     attendance_types = [2 if u.slack_id == the_q else 3 if u.slack_id in (the_coq or []) else 1 for u in db_users]
     attendance_records = [
