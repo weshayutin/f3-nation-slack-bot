@@ -3,7 +3,10 @@ services:
 
 ## f3-nation-slack-bot-app, this container waits for the db and
 ## db migrations to be ready and then runs the app.
+## Use --profile app to include this service
   app:
+    profiles:
+      - app
     build: .
     restart: always
     ports:

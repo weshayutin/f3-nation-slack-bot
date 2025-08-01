@@ -23,11 +23,38 @@ This setup includes automatic database schema creation using the F3-Data-Models 
    export SLACK_BOT_TOKEN=xoxb-your-bot-token
    export SLACK_SIGNING_SECRET=your-signing-secret
    ```
-   
 
-2. **Start the development environment**:
+2. **Choose your development approach:**
+
+   ### Option A: Run App Locally (Recommended for Development)
+   Running the app locally is much easier if using debugging like pdb.
    ```bash
-   docker-compose up --build
+   # Start only database and initialization (no app container)
+   docker-compose up -d
+   
+   # In a separate terminal, run the app locally
+   # Assumes your virtualenv is created and sourced.
+   
+   # Set local environment variables (these override compose.yml for local app)
+   export DATABASE_HOST=localhost      # Connect to Docker DB from outside
+   export LOCAL_DEVELOPMENT=true       # Enable development mode + skip data restoration
+   source .env                         # Load your Slack credentials
+   
+   # Run the app locally
+   nodemon --exec "python main.py" -e py
+   # OR just: python main.py
+   ```
+
+   **🎯 LOCAL_DEVELOPMENT Benefits:**
+   - ✅ Skips loading old paxminer/region data from database
+   - ✅ Faster startup and event processing
+   - ✅ No "Updating local region records..." messages
+   - ✅ Perfect for development with empty/test databases
+
+   ### Option B: Run Everything in Docker
+   ```bash
+   # Start all services including the app container
+   docker-compose --profile app up --build
    ```
 
 That's it! The F3-Data-Models repository is automatically cloned and set up during the Docker build process.
@@ -56,11 +83,28 @@ That's it! The F3-Data-Models repository is automatically cloned and set up duri
 
 ## Environment Variables
 
-The following environment variables are set automatically for Docker via the compose.yml:
+### For Docker Containers (when using `--profile app`)
 
+Environment variable precedence (highest to lowest):
+1. **Shell exports** (override everything)
+2. **`.env` file** variables
+3. **`environment:` section** in compose.yml  
+4. **`ENV` statements** in Dockerfile
+
+The following are set automatically via compose.yml:
 - `LOCAL_DEVELOPMENT=true` - Enables development mode
 - `DATABASE_HOST=db` - Points to the Docker database service
 - `PYTHON_VERSION=3.12` - Python version for database initialization
+
+### For Local App Development
+
+**Docker Compose environment variables don't affect local processes!** You must set them manually:
+
+```bash
+export DATABASE_HOST=localhost      # Connect to Docker DB from host
+export LOCAL_DEVELOPMENT=true       # Enable development mode  
+source .env                         # Load your .env file
+```
 
 You need to create a `.env` file with your database and Slack credentials:
 
@@ -146,15 +190,24 @@ docker volume rm -f $(docker volume ls)
 docker-compose build
 ```
 
-### run the app and db together 
+### Run Database Only (For Local App Development)
 
-```
-docker-compose up
+```bash
+# Start database and initialization only
+docker-compose up -d
+
+# Check database logs
+docker-compose logs -f db
 ```
 
-Full Rebuild and Start
-```
-docker-compose up --build
+### Run Everything in Docker
+
+```bash
+# Start all services including app
+docker-compose --profile app up
+
+# Full rebuild and start
+docker-compose --profile app up --build
 ```
 
 ### Investigate on a container ( example )
