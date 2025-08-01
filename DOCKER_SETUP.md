@@ -4,6 +4,15 @@ This setup includes automatic database schema creation using the F3-Data-Models 
 
 ## Quick Start
 
+0. For now.. Ensure apparmor or selinux is disabled on your devel box
+```
+# ubuntu / debian
+sudo apparmor_status
+# fedora / rhel
+getenforce
+```
+
+
 1. **Create your `.env` file** with your Slack credentials:
    ```bash
    cp .env.example .env  # if available
